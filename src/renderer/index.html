@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' blob: data:">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Révélateur Photo</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand"><i></i>Révélateur</div>
+    <div class="group">
+      <button class="btn" id="btnOpen" title="Ouvrir des photos (Ctrl+O)">Ouvrir</button>
+      <button class="btn" id="btnOpenFolder" title="Ouvrir toutes les photos d'un dossier (Ctrl+Maj+O)">Dossier</button>
+    </div>
+    <div class="group">
+      <button class="btn accent" id="btnAuto" title="Analyse la photo : lumière, couleurs, bruit (Ctrl+U)">Amélioration auto</button>
+      <button class="btn" id="btnReset" title="Remet tous les réglages à zéro (Ctrl+Maj+R)">Réinitialiser</button>
+    </div>
+    <div class="group">
+      <button class="btn icon" id="btnUndo" title="Annuler (Ctrl+Z)" aria-label="Annuler">↶</button>
+      <button class="btn icon" id="btnRedo" title="Rétablir (Ctrl+Y)" aria-label="Rétablir">↷</button>
+    </div>
+    <div class="seg" role="group" aria-label="Affichage">
+      <button id="modeAfter" aria-pressed="true">Après</button>
+      <button id="modeSplit" aria-pressed="false" title="Comparer avant / après (Y)">Avant / Après</button>
+      <button id="modeBefore" aria-pressed="false" title="Maintenez \ pour voir l'original">Avant</button>
+    </div>
+    <div class="group">
+      <button class="btn" id="btnZoom" title="Ajuster / 100 % (double-clic sur l'image)">Ajuster</button>
+      <button class="btn toggle" id="btnClip" aria-pressed="false" title="Montre les zones brûlées (rouge) et bouchées (bleu) — J">Écrêtage</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn" id="btnBatch" title="Traiter de nombreuses photos d'un coup (Ctrl+Maj+E)">Traitement par lot</button>
+    <button class="btn primary" id="btnExport" title="Exporter la photo affichée (Ctrl+E)">Exporter</button>
+  </header>
+
+  <main class="layout">
+    <!-- Panneau gauche : préréglages, instantanés, historique -->
+    <aside class="panel left" id="left">
+      <div class="search"><input type="search" id="presetSearch" placeholder="Rechercher un préréglage…" aria-label="Rechercher un préréglage"></div>
+      <details open id="secPresets">
+        <summary>Préréglages pro <span class="count" id="presetCount"></span></summary>
+        <div class="body"><div id="presetList" class="preset-list"></div></div>
+      </details>
+      <details open>
+        <summary>Mes préréglages <span class="count" id="userPresetCount"></span></summary>
+        <div class="body stack">
+          <div id="userPresetList" class="preset-list"></div>
+          <form class="inline" id="formPreset">
+            <input type="text" id="presetName" placeholder="Nom du préréglage" maxlength="40" aria-label="Nom du nouveau préréglage">
+            <button class="btn small" type="submit">Enregistrer</button>
+          </form>
+          <div class="row">
+            <button class="btn small ghost" id="btnPresetImport">Importer…</button>
+            <button class="btn small ghost" id="btnPresetExport">Exporter…</button>
+          </div>
+        </div>
+      </details>
+      <details open>
+        <summary>Instantanés</summary>
+        <div class="body stack">
+          <div id="snapList" class="list"></div>
+          <form class="inline" id="formSnap">
+            <input type="text" id="snapName" placeholder="Nom de l'instantané" maxlength="40" aria-label="Nom de l'instantané">
+            <button class="btn small" type="submit">Créer</button>
+          </form>
+        </div>
+      </details>
+      <details open>
+        <summary>Historique <span class="count" id="histCount"></span></summary>
+        <div class="body stack">
+          <ol id="histList" class="list history"></ol>
+          <button class="btn small ghost" id="btnHistClear">Effacer l'historique</button>
+        </div>
+      </details>
+    </aside>
+
+    <!-- Visionneuse -->
+    <section class="viewer">
+      <div class="viewport" id="viewport">
+        <div class="zoomer" id="zoomer">
+          <div class="stage" id="stage">
+            <canvas id="cvBefore"></canvas>
+            <canvas id="cvAfter"></canvas>
+            <div class="handle" id="handle" hidden></div>
+            <div class="crop" id="cropBox" hidden>
+              <i class="g g1"></i><i class="g g2"></i><i class="g g3"></i><i class="g g4"></i>
+              <b data-h="nw"></b><b data-h="ne"></b><b data-h="sw"></b><b data-h="se"></b>
+            </div>
+          </div>
+        </div>
+        <div class="tag" id="tagBefore" hidden>AVANT</div>
+        <div class="crop-bar" id="cropBar" hidden>
+          <label for="cropRatio">Format</label>
+          <select id="cropRatio">
+            <option value="free">Libre</option>
+            <option value="orig">Original</option>
+            <option value="1">1:1 carré</option>
+            <option value="0.8">4:5 Instagram</option>
+            <option value="1.5">3:2</option>
+            <option value="0.6667">2:3</option>
+            <option value="1.7778">16:9</option>
+            <option value="0.5625">9:16 story</option>
+            <option value="1.3333">4:3</option>
+          </select>
+          <button class="btn small" id="cropReset">Réinitialiser</button>
+          <button class="btn small ghost" id="cropCancel">Annuler (Échap)</button>
+          <button class="btn small primary" id="cropApply">Appliquer (Entrée)</button>
+        </div>
+        <div class="empty" id="empty" hidden>
+          <h1>Ouvrez vos photos pour commencer</h1>
+          <p>Glissez des photos ou un dossier ici, ou utilisez les boutons ci-dessous. Chaque photo est analysée et améliorée automatiquement à l'ouverture.</p>
+          <div class="row center">
+            <button class="btn primary" id="emptyOpen">Ouvrir des photos</button>
+            <button class="btn" id="emptyFolder">Ouvrir un dossier</button>
+            <button class="btn ghost" id="emptySample">Essayer avec une photo d'exemple</button>
+          </div>
+        </div>
+        <div class="drop-hint" id="dropHint" hidden>Déposez vos photos ou dossiers ici</div>
+        <div class="busy-chip" id="renderChip" hidden>Calcul…</div>
+      </div>
+      <div class="strip-bar">
+        <span class="strip-info" id="stripInfo">Aucune photo</span>
+        <label for="ratingFilter" class="sr">Filtrer par note</label>
+        <select id="ratingFilter" title="Filtrer par note">
+          <option value="0">Toutes les photos</option>
+          <option value="1">★ 1 et plus</option>
+          <option value="2">★ 2 et plus</option>
+          <option value="3">★ 3 et plus</option>
+          <option value="4">★ 4 et plus</option>
+          <option value="5">★ 5</option>
+        </select>
+        <div class="stars" id="starBar" role="group" aria-label="Note de la photo (touches 0 à 5)"></div>
+        <div class="spacer"></div>
+        <button class="btn small" id="btnSync" title="Applique les réglages de la photo affichée aux autres photos visibles">Synchroniser les réglages</button>
+      </div>
+      <div class="strip" id="strip"></div>
+    </section>
+
+    <!-- Panneau droit : histogramme et réglages -->
+    <aside class="panel right" id="right">
+      <div class="histo">
+        <canvas id="histo" width="640" height="190"></canvas>
+        <div class="meta"><span id="metaName">—</span><span id="metaSize"></span></div>
+      </div>
+      <div id="sections"></div>
+    </aside>
+  </main>
+</div>
+
+<!-- Export et traitement par lot -->
+<dialog id="dlgExport">
+  <form method="dialog" id="formExport">
+    <header class="dlg-head">
+      <h2 id="expTitle">Exporter</h2>
+      <button class="btn icon ghost" value="cancel" aria-label="Fermer">✕</button>
+    </header>
+    <div class="dlg-body">
+      <section class="batch-only">
+        <h3>Photos à traiter</h3>
+        <div class="radio">
+          <label><input type="radio" name="bSource" value="open" checked> Photos ouvertes <span class="muted" id="bOpenCount"></span></label>
+          <label><input type="radio" name="bSource" value="folder"> Un dossier du disque</label>
+        </div>
+        <div class="row folder-only">
+          <button class="btn small" type="button" id="bPickSource">Choisir le dossier source…</button>
+          <span class="path" id="bSourcePath">Aucun dossier choisi</span>
+          <label><input type="checkbox" id="bRecursive"> Inclure les sous-dossiers</label>
+        </div>
+        <div class="row open-only">
+          <label for="bMinRating">Uniquement les photos notées</label>
+          <select id="bMinRating">
+            <option value="0">toutes</option><option value="1">★ 1+</option><option value="2">★ 2+</option><option value="3">★ 3+</option><option value="4">★ 4+</option><option value="5">★ 5</option>
+          </select>
+        </div>
+        <h3>Réglages appliqués</h3>
+        <select id="bSettings" class="wide"></select>
+        <p class="hint">Les préréglages pro s'adaptent à chaque photo : l'analyse automatique (lumière, bruit, couleurs) est refaite pour chacune, puis le style est appliqué.</p>
+      </section>
+
+      <section>
+        <h3>Fichier</h3>
+        <div class="grid2">
+          <label for="eFormat">Format</label>
+          <select id="eFormat">
+            <option value="image/jpeg">JPEG</option>
+            <option value="image/png">PNG (sans perte)</option>
+            <option value="image/webp">WebP</option>
+          </select>
+          <label for="eQuality">Qualité <output id="eQualityOut">92</output></label>
+          <input type="range" id="eQuality" min="50" max="100" step="1" value="92">
+          <label for="eSizeMode">Taille</label>
+          <div class="row">
+            <select id="eSizeMode">
+              <option value="original">Taille d'origine</option>
+              <option value="long">Côté le plus long</option>
+              <option value="scale">Agrandir</option>
+            </select>
+            <input type="number" id="eLongSide" min="200" max="12000" step="10" value="2048" aria-label="Côté le plus long en pixels"><span class="muted unit-long">px</span>
+            <select id="eScale" aria-label="Facteur d'agrandissement"><option value="1.5">× 1,5</option><option value="2">× 2</option></select>
+          </div>
+        </div>
+        <div class="batch-only">
+          <div class="grid2">
+            <label for="bDest">Dossier de sortie</label>
+            <div class="row">
+              <button class="btn small" type="button" id="bPickDest">Choisir…</button>
+              <span class="path" id="bDestPath">Aucun dossier choisi</span>
+            </div>
+            <label for="bPattern">Nom des fichiers</label>
+            <div>
+              <input type="text" id="bPattern" value="{nom}_revele" class="wide">
+              <p class="hint">Balises : <code>{nom}</code> nom d'origine, <code>{n}</code> numéro (001, 002…), <code>{date}</code> date du jour. Exemple : <b id="bPatternEx"></b></p>
+            </div>
+          </div>
+          <label class="check"><input type="checkbox" id="bOpenAfter" checked> Ouvrir le dossier à la fin</label>
+        </div>
+      </section>
+
+      <section>
+        <h3>Filigrane</h3>
+        <label class="check"><input type="checkbox" id="wEnabled"> Ajouter un filigrane texte</label>
+        <div class="grid2 wm-only">
+          <label for="wText">Texte</label>
+          <input type="text" id="wText" placeholder="© Votre nom" maxlength="80">
+          <label for="wPos">Position</label>
+          <select id="wPos">
+            <option value="br">En bas à droite</option><option value="bl">En bas à gauche</option>
+            <option value="tr">En haut à droite</option><option value="tl">En haut à gauche</option><option value="c">Au centre</option>
+          </select>
+          <label for="wOpacity">Opacité <output id="wOpacityOut">60 %</output></label>
+          <input type="range" id="wOpacity" min="10" max="100" value="60">
+          <label for="wSize">Taille <output id="wSizeOut">3 %</output></label>
+          <input type="range" id="wSize" min="1" max="10" step="0.5" value="3">
+        </div>
+      </section>
+
+      <section class="progress-wrap" id="bProgress" hidden>
+        <div class="progress"><i id="bBar"></i></div>
+        <p id="bStatus" class="muted"></p>
+        <ul id="bErrors" class="errors"></ul>
+      </section>
+    </div>
+    <footer class="dlg-foot">
+      <button class="btn ghost" value="cancel" id="expClose">Fermer</button>
+      <button class="btn" type="button" id="bCancel" hidden>Arrêter</button>
+      <button class="btn primary" type="button" id="expGo">Exporter</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="dlgKeys">
+  <form method="dialog">
+    <header class="dlg-head"><h2>Raccourcis clavier</h2><button class="btn icon ghost" aria-label="Fermer">✕</button></header>
+    <div class="dlg-body keys">
+      <dl>
+        <dt>Ctrl + O</dt><dd>Ouvrir des photos</dd>
+        <dt>Ctrl + Maj + O</dt><dd>Ouvrir un dossier</dd>
+        <dt>Ctrl + E</dt><dd>Exporter la photo</dd>
+        <dt>Ctrl + Maj + E</dt><dd>Traitement par lot</dd>
+        <dt>Ctrl + Z / Ctrl + Y</dt><dd>Annuler / rétablir</dd>
+        <dt>Ctrl + Maj + C / V</dt><dd>Copier / coller les réglages</dd>
+        <dt>Ctrl + U</dt><dd>Amélioration auto</dd>
+        <dt>← / →</dt><dd>Photo précédente / suivante</dd>
+        <dt>0 à 5</dt><dd>Noter la photo</dd>
+        <dt>Y</dt><dd>Avant / après côte à côte</dd>
+        <dt>\ (maintenu)</dt><dd>Voir l'original</dd>
+        <dt>J</dt><dd>Alerte d'écrêtage</dd>
+        <dt>R</dt><dd>Recadrer · Entrée pour appliquer · Échap pour annuler</dd>
+        <dt>Molette / double-clic</dt><dd>Zoomer · glisser pour se déplacer</dd>
+        <dt>Double-clic sur un curseur</dt><dd>Remettre à zéro</dd>
+        <dt>Suppr</dt><dd>Retirer la photo de la session</dd>
+      </dl>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="busy" id="busy" hidden><div id="busyText">Traitement…</div></div>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

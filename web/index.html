@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Révélateur Photo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Mise en page : chambre noire — visionneuse centrale, table de réglages à droite, pellicule en bas.
+   Thème sombre volontaire (neutre légèrement chaud) pour juger les couleurs sans biais ; accent ambre « lumière inactinique ». */
+:root {
+  --bg: #141211;
+  --panel: #1c1917;
+  --panel-2: #242019;
+  --line: #322c27;
+  --fg: #ece6df;
+  --muted: #9d938a;
+  --accent: #e9a04b;
+  --accent-ink: #1a1208;
+  --font-display: "Sora", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 13px/1.45 var(--font-body); overflow: hidden; }
+button, select, input { font: inherit; color: inherit; }
+button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+header.top {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
+  border-bottom: 1px solid var(--line); background: var(--panel);
+}
+.brand { font: 600 15px var(--font-display); letter-spacing: .01em; margin-right: auto; display: flex; align-items: center; gap: 9px; }
+.brand i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+.btn { border: 1px solid var(--line); background: var(--panel-2); padding: 7px 13px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 7px 11px; cursor: pointer; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--panel-2); color: var(--fg); box-shadow: inset 0 -2px 0 var(--accent); }
+
+main.layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; min-height: 0; }
+.viewer { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+.viewport { position: relative; display: grid; place-items: center; min-height: 0; overflow: hidden; padding: 16px; }
+.stage { position: relative; box-shadow: 0 10px 40px rgba(0,0,0,.5); touch-action: none; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.stage.split { cursor: ew-resize; }
+.handle { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--fg); transform: translateX(-1px); pointer-events: none; }
+.handle::after { content: "AVANT  ·  APRÈS"; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); white-space: pre;
+  font: 500 10px var(--font-mono); letter-spacing: .12em; background: rgba(20,18,17,.75); color: var(--fg); padding: 3px 8px; border-radius: 4px; }
+.tag { position: absolute; left: 10px; bottom: 10px; font: 500 10px var(--font-mono); letter-spacing: .12em; background: rgba(20,18,17,.75); padding: 3px 8px; border-radius: 4px; }
+.drop-hint { position: absolute; inset: 12px; border: 2px dashed var(--accent); border-radius: 10px; display: grid; place-items: center;
+  background: rgba(20,18,17,.82); font: 600 16px var(--font-display); pointer-events: none; }
+
+.strip { display: flex; gap: 8px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel); overflow-x: auto; }
+.thumb { position: relative; flex: 0 0 auto; width: 96px; height: 64px; border-radius: 4px; overflow: hidden; border: 2px solid transparent; cursor: pointer; padding: 0; background: #000; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb[aria-current="true"] { border-color: var(--accent); }
+.thumb span { position: absolute; left: 0; right: 0; bottom: 0; font-size: 10px; padding: 1px 4px; background: rgba(0,0,0,.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.strip-actions { display: flex; gap: 8px; margin-left: auto; flex: 0 0 auto; }
+
+aside.panel { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; min-height: 0; }
+.histo { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+.histo canvas { width: 100%; height: 92px; display: block; background: #0e0d0c; border-radius: 4px; }
+.meta { display: flex; justify-content: space-between; color: var(--muted); font: 11px var(--font-mono); margin-top: 6px; font-variant-numeric: tabular-nums; }
+details { border-bottom: 1px solid var(--line); }
+summary { list-style: none; cursor: pointer; padding: 12px 16px; font: 600 11px var(--font-body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; font-family: var(--font-mono); }
+details[open] summary::after { content: "−"; }
+details[open] summary { color: var(--fg); }
+.body { padding: 0 16px 14px; display: grid; gap: 10px; }
+.presets { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.presets button { text-align: left; border: 1px solid var(--line); background: var(--panel-2); border-radius: 6px; padding: 7px 9px; cursor: pointer; }
+.presets button:hover { border-color: var(--muted); }
+.presets button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.presets small { display: block; color: var(--muted); font-size: 11px; }
+
+.ctl { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; }
+.ctl label { color: var(--fg); }
+.ctl output { font: 12px var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 4.5em; text-align: right; }
+.ctl input[type=range] { grid-column: 1 / -1; }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; background: transparent; cursor: pointer; margin: 0; }
+input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--track, var(--line)); }
+input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: var(--track, var(--line)); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--fg); margin-top: -5px; border: 2px solid var(--bg); }
+input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--fg); border: 2px solid var(--bg); }
+.hint { color: var(--muted); font-size: 11.5px; margin: 0; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row label { color: var(--muted); }
+select { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.stack { display: grid; gap: 8px; }
+
+.busy { position: fixed; inset: 0; background: rgba(10,9,8,.72); display: grid; place-items: center; z-index: 10; }
+.busy div { background: var(--panel); border: 1px solid var(--line); padding: 18px 24px; border-radius: 10px; font: 500 14px var(--font-display); display: flex; gap: 12px; align-items: center; }
+.busy div::before { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--accent); border-right-color: transparent; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .busy div::before { animation: none; } }
+
+@media (max-width: 900px) {
+  body { overflow: auto; }
+  .app { height: auto; }
+  main.layout { grid-template-columns: 1fr; }
+  .viewport { height: 62vh; }
+  aside.panel { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+  .brand { width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand"><i></i>Révélateur Photo</div>
+    <button class="btn" id="btnOpen" title="Ouvrir une ou plusieurs photos (ou glissez-les dans la fenêtre)">Ouvrir des photos</button>
+    <input type="file" id="fileInput" accept="image/*" multiple hidden>
+    <button class="btn" id="btnAuto" title="Analyse la photo et corrige exposition, balance des blancs et contraste">Auto</button>
+    <button class="btn" id="btnReset">Réinitialiser</button>
+    <div class="seg" role="group" aria-label="Affichage">
+      <button id="modeAfter" aria-pressed="true">Après</button>
+      <button id="modeSplit" aria-pressed="false">Avant / Après</button>
+      <button id="modeBefore" aria-pressed="false">Avant</button>
+    </div>
+    <button class="btn primary" id="btnExport">Exporter</button>
+  </header>
+
+  <main class="layout">
+    <section class="viewer">
+      <div class="viewport" id="viewport">
+        <div class="stage" id="stage">
+          <canvas id="cvBefore"></canvas>
+          <canvas id="cvAfter"></canvas>
+          <div class="handle" id="handle" hidden></div>
+          <div class="tag" id="tagBefore" hidden>AVANT</div>
+        </div>
+        <div class="drop-hint" id="dropHint" hidden>Déposez vos photos ici</div>
+      </div>
+      <div class="strip" id="strip">
+        <div class="strip-actions">
+          <button class="btn" id="btnSync" title="Copie les réglages de la photo affichée sur toutes les autres">Appliquer à toutes</button>
+          <button class="btn" id="btnExportAll">Exporter tout</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel" id="panel">
+      <div class="histo">
+        <canvas id="histo" width="600" height="184"></canvas>
+        <div class="meta"><span id="metaName">—</span><span id="metaSize">—</span></div>
+      </div>
+      <details open>
+        <summary>Préréglages</summary>
+        <div class="body"><div class="presets" id="presets"></div>
+          <p class="hint">Chaque préréglage part de l'analyse automatique de la photo, puis applique un style. Affinez ensuite avec les curseurs. Double-clic sur un curseur pour le remettre à zéro.</p>
+        </div>
+      </details>
+      <div id="sections"></div>
+      <details open>
+        <summary>Export</summary>
+        <div class="body stack">
+          <div class="row">
+            <label for="expFormat">Format</label>
+            <select id="expFormat">
+              <option value="image/jpeg">JPEG</option>
+              <option value="image/png">PNG (sans perte)</option>
+              <option value="image/webp">WebP</option>
+            </select>
+            <label for="expScale">Taille</label>
+            <select id="expScale">
+              <option value="1">100 %</option>
+              <option value="1.5">150 %</option>
+              <option value="2">200 % (agrandir)</option>
+            </select>
+          </div>
+          <div class="ctl">
+            <label for="expQuality">Qualité JPEG / WebP</label><output id="expQualityOut">95</output>
+            <input type="range" id="expQuality" min="60" max="100" step="1" value="95">
+          </div>
+          <p class="hint">L'export traite l'image en pleine résolution. Les grandes photos peuvent prendre quelques secondes.</p>
+        </div>
+      </details>
+    </aside>
+  </main>
+</div>
+<div class="busy" id="busy" hidden><div id="busyText">Traitement…</div></div>
+
+<script>
+"use strict";
+/* ============================================================
+   Réglages
+   ============================================================ */
+const DEFAULTS = {
+  exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0,
+  temp: 0, tint: 0,
+  clarity: 0, dehaze: 0, vibrance: 0, saturation: 0,
+  shHue: 210, shSat: 0, hiHue: 40, hiSat: 0, balance: 0,
+  sharpen: 0, denoise: 0,
+  vignette: 0, grain: 0
+};
+const RAINBOW = "linear-gradient(90deg,#f33,#fb3,#3f3,#3ff,#36f,#f3f,#f33)";
+const fmtSigned = v => (v > 0 ? "+" : "") + Math.round(v);
+const SECTIONS = [
+  { title: "Lumière", items: [
+    ["exposure", "Exposition", -3, 3, 0.05, v => (v > 0 ? "+" : "") + v.toFixed(2) + " IL"],
+    ["contrast", "Contraste", -100, 100, 1],
+    ["highlights", "Hautes lumières", -100, 100, 1],
+    ["shadows", "Ombres", -100, 100, 1],
+    ["whites", "Blancs", -100, 100, 1],
+    ["blacks", "Noirs", -100, 100, 1],
+  ]},
+  { title: "Balance des blancs", items: [
+    ["temp", "Température", -100, 100, 1, null, "linear-gradient(90deg,#4f7fd8,#d8d0c0,#e8b040)"],
+    ["tint", "Teinte", -100, 100, 1, null, "linear-gradient(90deg,#4fbf5a,#d0d0d0,#c050c8)"],
+  ]},
+  { title: "Présence", items: [
+    ["clarity", "Clarté", -100, 100, 1],
+    ["dehaze", "Correction du voile", -100, 100, 1],
+    ["vibrance", "Vibrance", -100, 100, 1],
+    ["saturation", "Saturation", -100, 100, 1],
+  ]},
+  { title: "Étalonnage couleur", open: false, items: [
+    ["shHue", "Ombres · teinte", 0, 360, 1, v => Math.round(v) + "°", RAINBOW],
+    ["shSat", "Ombres · intensité", 0, 100, 1],
+    ["hiHue", "Hautes lumières · teinte", 0, 360, 1, v => Math.round(v) + "°", RAINBOW],
+    ["hiSat", "Hautes lumières · intensité", 0, 100, 1],
+    ["balance", "Équilibre", -100, 100, 1],
+  ]},
+  { title: "Détail", items: [
+    ["sharpen", "Netteté", 0, 150, 1],
+    ["denoise", "Réduction du bruit", 0, 100, 1],
+  ]},
+  { title: "Effets", open: false, items: [
+    ["vignette", "Vignetage", -100, 100, 1],
+    ["grain", "Grain", 0, 100, 1],
+  ]},
+];
+
+/* Préréglages : partent de l'analyse auto, puis ajoutent (add) ou fixent (set) des valeurs. */
+const PRESETS = [
+  { id: "auto",      name: "Auto pro",       sub: "Correction neutre" },
+  { id: "natural",   name: "Naturel",        sub: "Fidèle, un peu de peps", add: { vibrance: 10, clarity: 6 } },
+  { id: "vivid",     name: "Éclatant",       sub: "Couleurs riches", add: { vibrance: 30, saturation: 8, contrast: 14, clarity: 14, dehaze: 8 } },
+  { id: "portrait",  name: "Portrait doux",  sub: "Peau lissée, chaud", add: { clarity: -22, temp: 7, highlights: -15, shadows: 15, vibrance: -5, denoise: 25 }, set: { sharpen: 20 } },
+  { id: "landscape", name: "Paysage",        sub: "Ciel et détails", add: { dehaze: 22, clarity: 22, vibrance: 35, highlights: -35, shadows: 25 }, set: { sharpen: 55 } },
+  { id: "cinema",    name: "Cinéma",         sub: "Sarcelle & orange", add: { contrast: 10, saturation: -12, blacks: 12 }, set: { shHue: 195, shSat: 38, hiHue: 32, hiSat: 32, vignette: -22 } },
+  { id: "golden",    name: "Heure dorée",    sub: "Lumière chaude", add: { temp: 20, tint: 4, vibrance: 20, shadows: 10 }, set: { hiHue: 40, hiSat: 25, vignette: -15 } },
+  { id: "nordic",    name: "Nordique",       sub: "Froid, épuré", add: { temp: -14, saturation: -20, shadows: 20, contrast: -6, whites: 10 }, set: { shHue: 210, shSat: 15 } },
+  { id: "film",      name: "Argentique",     sub: "Noirs passés, grain", add: { blacks: 22, contrast: 10, saturation: -10 }, set: { grain: 25, hiHue: 45, hiSat: 15, shHue: 170, shSat: 14 } },
+  { id: "bw",        name: "Noir & blanc",   sub: "Contraste profond", add: { contrast: 28, clarity: 22 }, set: { saturation: -100, vibrance: 0, grain: 14, vignette: -20, shSat: 0, hiSat: 0 } },
+];
+
+/* ============================================================
+   Moteur de développement (pixels en flottant 0..1)
+   ============================================================ */
+const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
+function smooth(a, b, x) { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); }
+
+// Flou gaussien approché : passes successives de flou boîte séparable.
+function blur(src, w, h, r, passes) {
+  let a = Float32Array.from(src), tmp = new Float32Array(src.length);
+  const inv = 1 / (2 * r + 1);
+  for (let p = 0; p < passes; p++) {
+    for (let y = 0; y < h; y++) {           // horizontal
+      const row = y * w; let sum = 0;
+      for (let k = -r; k <= r; k++) sum += a[row + Math.min(w - 1, Math.max(0, k))];
+      for (let x = 0; x < w; x++) {
+        tmp[row + x] = sum * inv;
+        sum += a[row + Math.min(w - 1, x + r + 1)] - a[row + Math.max(0, x - r)];
+      }
+    }
+    for (let x = 0; x < w; x++) {           // vertical
+      let sum = 0;
+      for (let k = -r; k <= r; k++) sum += tmp[Math.min(h - 1, Math.max(0, k)) * w + x];
+      for (let y = 0; y < h; y++) {
+        a[y * w + x] = sum * inv;
+        sum += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+      }
+    }
+  }
+  return a;
+}
+
+function hueVec(h) { // vecteur de chrominance pure (luminance nulle) pour une teinte
+  const f = n => { const k = (n + h / 60) % 6; return 1 - Math.max(0, Math.min(k, 4 - k, 1)); };
+  const r = f(5), g = f(3), b = f(1), l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return [r - l, g - l, b - l];
+}
+
+function develop(src, w, h, p, out) {
+  const n = w * h;
+  const R = new Float32Array(n), G = new Float32Array(n), B = new Float32Array(n), L = new Float32Array(n);
+
+  // 1. Balance des blancs + exposition, en lumière linéaire, via tables 8 bits
+  const t = p.temp / 100, ti = p.tint / 100;
+  const mR = 1 + t * 0.3, mB = 1 - t * 0.3, mG = 1 - ti * 0.25;
+  const norm = 1 / (0.2126 * mR + 0.7152 * mG + 0.0722 * mB);
+  const ev = Math.pow(2, p.exposure);
+  const lr = new Float32Array(256), lg = new Float32Array(256), lb = new Float32Array(256);
+  for (let i = 0; i < 256; i++) {
+    const lin = Math.pow(i / 255, 2.2) * ev * norm;
+    lr[i] = Math.pow(lin * mR, 1 / 2.2); lg[i] = Math.pow(lin * mG, 1 / 2.2); lb[i] = Math.pow(lin * mB, 1 / 2.2);
+  }
+  for (let i = 0, j = 0; i < n; i++, j += 4) { R[i] = lr[src[j]]; G[i] = lg[src[j + 1]]; B[i] = lb[src[j + 2]]; }
+
+  // 2. Réduction du bruit (luminance préservant les contours + chrominance)
+  if (p.denoise > 0) {
+    const amt = p.denoise / 100, rad = amt > 0.5 ? 2 : 1, sig = 0.02 + amt * 0.06, sig2 = sig * sig;
+    for (let i = 0; i < n; i++) L[i] = 0.2126 * R[i] + 0.7152 * G[i] + 0.0722 * B[i];
+    const bL = blur(L, w, h, 1, 2), bR = blur(R, w, h, rad, 2), bG = blur(G, w, h, rad, 2), bB = blur(B, w, h, rad, 2);
+    for (let i = 0; i < n; i++) {
+      const e = L[i] - bL[i], k = amt * Math.exp(-(e * e) / sig2);
+      R[i] += (bR[i] - R[i]) * k; G[i] += (bG[i] - G[i]) * k; B[i] += (bB[i] - B[i]) * k;
+    }
+    const cR = new Float32Array(n), cB = new Float32Array(n);
+    for (let i = 0; i < n; i++) { L[i] = 0.2126 * R[i] + 0.7152 * G[i] + 0.0722 * B[i]; cR[i] = R[i] - L[i]; cB[i] = B[i] - L[i]; }
+    const bcR = blur(cR, w, h, 2 + rad, 2), bcB = blur(cB, w, h, 2 + rad, 2);
+    for (let i = 0; i < n; i++) {
+      const r = L[i] + cR[i] + (bcR[i] - cR[i]) * amt, b = L[i] + cB[i] + (bcB[i] - cB[i]) * amt;
+      R[i] = r; B[i] = b; G[i] = (L[i] - 0.2126 * r - 0.0722 * b) / 0.7152;
+    }
+  }
+
+  // 3. Tonalité : noirs/blancs, ombres, hautes lumières, contraste (sur la luminance, teintes préservées)
+  const bp = -p.blacks / 100 * 0.12, wp = 1 - p.whites / 100 * 0.2, inv = 1 / Math.max(0.05, wp - bp);
+  const sh = p.shadows / 100, hi = p.highlights / 100, c = p.contrast / 100;
+  for (let i = 0; i < n; i++) {
+    const r = R[i], g = G[i], b = B[i];
+    const Lin = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    let l = (Lin - bp) * inv, lc = clamp01(l);
+    if (sh) { const q = 1 - lc; l += sh * 0.5 * 4 * lc * q * q * q; }
+    if (hi) { const m = smooth(0.4, 1, l); l += hi < 0 ? hi * 0.3 * m * Math.min(l, 1.6) : hi * 0.6 * m * (1 - lc); }
+    lc = clamp01(l);
+    if (c > 0) l += (lc * lc * (3 - 2 * lc) - lc) * c;
+    else if (c < 0) l = 0.5 + (l - 0.5) * (1 + c * 0.5);
+    const k = l / Math.max(Lin, 1e-5), d = l - Lin, wt = Lin < 0.03 ? Lin / 0.03 : 1;
+    R[i] = r * k * wt + (r + d) * (1 - wt);
+    G[i] = g * k * wt + (g + d) * (1 - wt);
+    B[i] = b * k * wt + (b + d) * (1 - wt);
+    L[i] = l;
+  }
+
+  // 4. Clarté et correction du voile (contraste local)
+  if (p.clarity || p.dehaze) {
+    const rad = Math.max(2, Math.round(Math.max(w, h) * 0.012));
+    const bl = blur(L, w, h, rad, 3);
+    const cl = p.clarity / 100, dh = p.dehaze / 100;
+    const k = dh > 0 ? dh * 0.12 : 0, ik = 1 / (1 - k), fog = dh < 0 ? -dh * 0.4 : 0;
+    for (let i = 0; i < n; i++) {
+      const l = L[i], lc = clamp01(l), m = 1 - (2 * lc - 1) * (2 * lc - 1), d = l - bl[i];
+      const delta = cl * d * (0.25 + 0.75 * m) + (dh > 0 ? dh * 0.5 * d : 0);
+      let r = R[i] + delta, g = G[i] + delta, b = B[i] + delta;
+      if (k) { r = (r - k) * ik; g = (g - k) * ik; b = (b - k) * ik; }
+      if (fog) { r += (0.8 - r) * fog; g += (0.8 - g) * fog; b += (0.8 - b) * fog; }
+      R[i] = r; G[i] = g; B[i] = b;
+    }
+  }
+
+  // 5. Couleur : vibrance, saturation, étalonnage ombres / hautes lumières
+  const sat = p.saturation / 100 + Math.max(0, p.dehaze) / 100 * 0.25, vib = p.vibrance / 100;
+  const sv = hueVec(p.shHue), hv = hueVec(p.hiHue), ss = p.shSat / 100 * 0.22, hs = p.hiSat / 100 * 0.22, bal = p.balance / 100 * 0.3;
+  for (let i = 0; i < n; i++) {
+    let r = R[i], g = G[i], b = B[i];
+    const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), cs = Math.min(1, (mx - mn) * 1.5);
+    let vf = vib * (1 - cs) * 1.2;
+    if (vf > 0 && r > g && g > b) vf *= 0.6; // protège les tons chair
+    const f = Math.max(0, 1 + sat + vf);
+    r = l + (r - l) * f; g = l + (g - l) * f; b = l + (b - l) * f;
+    if (ss || hs) {
+      const lb = clamp01(l + bal), ws = (1 - lb) * (1 - lb) * ss, wh = lb * lb * hs;
+      r += sv[0] * ws + hv[0] * wh; g += sv[1] * ws + hv[1] * wh; b += sv[2] * ws + hv[2] * wh;
+    }
+    R[i] = r; G[i] = g; B[i] = b;
+    L[i] = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  // 6. Netteté (masque flou sur la luminance) + vignetage + grain + sortie
+  const shAmt = p.sharpen / 100 * 1.2;
+  const sb = shAmt ? blur(L, w, h, 1, 2) : null;
+  const vig = p.vignette / 100 * 0.75, gr = p.grain / 100 * 0.14;
+  const cx = w / 2, cy = h / 2;
+  let seed = 1234567;
+  const o = out.data;
+  for (let y = 0, i = 0; y < h; y++) {
+    const dy = (y - cy) / cy;
+    for (let x = 0; x < w; x++, i++) {
+      let r = R[i], g = G[i], b = B[i];
+      if (sb) {
+        let d = L[i] - sb[i]; const ad = d < 0 ? -d : d;
+        d *= smooth(0.002, 0.012, ad) * shAmt;
+        r += d; g += d; b += d;
+      }
+      if (vig) {
+        const dx = (x - cx) / cx, v = smooth(0.35, 1.0, Math.sqrt((dx * dx + dy * dy) / 2) * 1.15);
+        const k = 1 + vig * v; r *= k; g *= k; b *= k;
+        if (vig > 0) { const a = vig * v * 0.6; r += (1 - r) * a; g += (1 - g) * a; b += (1 - b) * a; }
+      }
+      if (gr) {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        const l = clamp01(L[i]), nz = (seed / 4294967296 - 0.5) * gr * (0.4 + 2.4 * l * (1 - l));
+        r += nz; g += nz; b += nz;
+      }
+      // Compression douce hors gamut : on désature plutôt que de couper net
+      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      if (mx > 1) {
+        if (lum < 1) { const k = (1 - lum) / (mx - lum); r = lum + (r - lum) * k; g = lum + (g - lum) * k; b = lum + (b - lum) * k; }
+        else { r = g = b = 1; }
+      }
+      if (mn < 0 && lum > 0) { const k = lum / (lum - mn); r = lum + (r - lum) * k; g = lum + (g - lum) * k; b = lum + (b - lum) * k; }
+      const j = i * 4;
+      o[j] = r * 255 + 0.5; o[j + 1] = g * 255 + 0.5; o[j + 2] = b * 255 + 0.5; o[j + 3] = 255;
+    }
+  }
+  return out;
+}
+
+/* Analyse automatique : balance des blancs (monde gris pondéré), exposition, points noir/blanc, contraste. */
+function autoParams(data, w, h) {
+  const n = w * h, step = Math.max(1, Math.floor(n / 250000));
+  const hist = new Uint32Array(1024);
+  let sr = 0, sg = 0, sb = 0, cnt = 0, total = 0;
+  for (let i = 0; i < n; i += step) {
+    const j = i * 4, r = data[j] / 255, g = data[j + 1] / 255, b = data[j + 2] / 255;
+    const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    hist[Math.min(1023, (L * 1023) | 0)]++; total++;
+    if (L > 0.1 && L < 0.92) { sr += Math.pow(r, 2.2); sg += Math.pow(g, 2.2); sb += Math.pow(b, 2.2); cnt++; }
+  }
+  const pct = q => { const target = q * total; let acc = 0; for (let i = 0; i < 1024; i++) { acc += hist[i]; if (acc >= target) return i / 1023; } return 1; };
+  const P = { ...DEFAULTS };
+
+  if (cnt > 100) {
+    const a = (sb - sr) / (sb + sr);
+    const T = Math.max(-0.35, Math.min(0.35, a / 0.3 * 0.55));
+    P.temp = Math.round(T * 100);
+    const target = (sr * (1 + 0.3 * T) + sb * (1 - 0.3 * T)) / 2, mulG = target / Math.max(sg, 1e-6);
+    P.tint = Math.round(Math.max(-0.3, Math.min(0.3, (1 - mulG) / 0.25 * 0.5)) * 100);
+  }
+  const med = pct(0.5);
+  const ev = Math.max(-1.2, Math.min(1.5, 2.2 * Math.log2(0.46 / Math.max(med, 0.02)) * 0.6));
+  P.exposure = Math.round(ev * 20) / 20;
+  const gain = Math.pow(2, P.exposure / 2.2), rawLo = pct(0.005);
+  const lo = rawLo * gain, hiV = pct(0.995) * gain;
+  P.blacks = Math.round(Math.max(-70, Math.min(0, -(lo * 0.9) / 0.12 * 100)));
+  P.whites = Math.round(Math.max(-40, Math.min(50, (1 - Math.max(0.75, Math.min(1.25, hiV))) / 0.2 * 100)));
+  const bp = -P.blacks / 100 * 0.12, wp = 1 - P.whites / 100 * 0.2, lev = x => (x * gain - bp) / (wp - bp);
+  const p25 = lev(pct(0.25)), p95 = lev(pct(0.95)), spread = lev(pct(0.9)) - lev(pct(0.1));
+  P.shadows = Math.round(Math.min(55, 10 + (p25 < 0.2 ? (0.2 - p25) * 200 : 0)));
+  P.highlights = Math.round(Math.max(-70, -15 - (p95 > 0.9 ? (p95 - 0.9) * 400 : 0) - (hiV > 1 ? (hiV - 1) * 150 : 0)));
+  P.contrast = Math.round(Math.min(30, 8 + (spread < 0.55 ? (0.55 - spread) * 120 : 0)));
+  P.dehaze = Math.round(Math.max(0, Math.min(30, (rawLo - 0.06) * 150)));
+  P.vibrance = 22; P.clarity = 12; P.sharpen = 35;
+  return P;
+}
+
+function applyPreset(base, preset) {
+  const P = { ...base };
+  if (preset.add) for (const k in preset.add) P[k] = (P[k] || 0) + preset.add[k];
+  if (preset.set) Object.assign(P, preset.set);
+  for (const s of SECTIONS) for (const [k, , min, max] of s.items) P[k] = Math.max(min, Math.min(max, P[k]));
+  return P;
+}
+
+/* ============================================================
+   Interface
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const state = { items: [], cur: -1, mode: "after", split: 50 };
+const PREVIEW_MAX = 1600;
+const cvBefore = $("cvBefore"), cvAfter = $("cvAfter"), stage = $("stage"), viewport = $("viewport");
+const ctxB = cvBefore.getContext("2d"), ctxA = cvAfter.getContext("2d");
+const inputs = {};
+
+// Construction des sections de curseurs
+(function buildPanel() {
+  const host = $("sections");
+  for (const s of SECTIONS) {
+    const det = document.createElement("details");
+    if (s.open !== false) det.open = true;
+    det.innerHTML = `<summary>${s.title}</summary><div class="body"></div>`;
+    const body = det.querySelector(".body");
+    for (const [key, label, min, max, step, fmt, track] of s.items) {
+      const wrap = document.createElement("div");
+      wrap.className = "ctl";
+      wrap.innerHTML = `<label for="p_${key}">${label}</label><output id="o_${key}"></output>
+        <input type="range" id="p_${key}" min="${min}" max="${max}" step="${step}" value="${DEFAULTS[key]}">`;
+      const inp = wrap.querySelector("input"), out = wrap.querySelector("output");
+      if (track) inp.style.setProperty("--track", track);
+      const show = v => out.textContent = (fmt || fmtSigned)(v);
+      inp.addEventListener("input", () => {
+        const it = curItem(); if (!it) return;
+        it.params[key] = parseFloat(inp.value); it.preset = null; show(it.params[key]); markPresets(); scheduleRender();
+      });
+      inp.addEventListener("dblclick", () => { inp.value = DEFAULTS[key]; inp.dispatchEvent(new Event("input")); });
+      inputs[key] = { inp, show };
+      body.appendChild(wrap);
+    }
+    host.appendChild(det);
+  }
+  const ph = $("presets");
+  for (const pr of PRESETS) {
+    const b = document.createElement("button");
+    b.dataset.id = pr.id; b.setAttribute("aria-pressed", "false");
+    b.innerHTML = `${pr.name}<small>${pr.sub}</small>`;
+    b.addEventListener("click", () => {
+      const it = curItem(); if (!it) return;
+      it.params = applyPreset(it.auto, pr); it.preset = pr.id; syncControls(); scheduleRender();
+    });
+    ph.appendChild(b);
+  }
+})();
+
+function curItem() { return state.items[state.cur]; }
+function syncControls() {
+  const it = curItem(); if (!it) return;
+  for (const k in inputs) { inputs[k].inp.value = it.params[k]; inputs[k].show(it.params[k]); }
+  markPresets();
+}
+function markPresets() {
+  const it = curItem();
+  document.querySelectorAll("#presets button").forEach(b => b.setAttribute("aria-pressed", String(!!it && it.preset === b.dataset.id)));
+}
+
+// Rendu de l'aperçu (regroupé par image d'animation)
+let renderQueued = false;
+function scheduleRender() { if (!renderQueued) { renderQueued = true; requestAnimationFrame(renderPreview); } }
+function renderPreview() {
+  renderQueued = false;
+  const it = curItem(); if (!it) return;
+  const { pw, ph, preview } = it;
+  if (cvAfter.width !== pw || cvAfter.height !== ph) { cvAfter.width = cvBefore.width = pw; cvAfter.height = cvBefore.height = ph; fitStage(); }
+  ctxB.putImageData(preview, 0, 0);
+  const out = develop(preview.data, pw, ph, it.params, new ImageData(pw, ph));
+  ctxA.putImageData(out, 0, 0);
+  drawHisto(out.data);
+  applyMode();
+}
+
+function fitStage() {
+  const it = curItem(); if (!it) return;
+  const vw = viewport.clientWidth - 32, vh = viewport.clientHeight - 32, ratio = it.w / it.h;
+  let sw = vw, sh = vw / ratio;
+  if (sh > vh) { sh = vh; sw = vh * ratio; }
+  stage.style.width = Math.max(10, sw) + "px"; stage.style.height = Math.max(10, sh) + "px";
+}
+new ResizeObserver(fitStage).observe(viewport);
+
+function drawHisto(d) {
+  const c = $("histo"), g = c.getContext("2d"), W = c.width, H = c.height, bins = 128;
+  const hs = [new Uint32Array(bins), new Uint32Array(bins), new Uint32Array(bins)];
+  for (let i = 0; i < d.length; i += 16) { hs[0][d[i] >> 1]++; hs[1][d[i + 1] >> 1]++; hs[2][d[i + 2] >> 1]++; }
+  const all = [...hs[0], ...hs[1], ...hs[2]].sort((a, b) => a - b);
+  const max = Math.max(1, all[Math.floor(all.length * 0.985)]);
+  g.clearRect(0, 0, W, H);
+  g.globalCompositeOperation = "lighter";
+  const cols = ["rgba(230,70,60,.75)", "rgba(80,200,90,.75)", "rgba(70,120,240,.75)"];
+  hs.forEach((h, ci) => {
+    g.beginPath(); g.moveTo(0, H);
+    for (let i = 0; i < bins; i++) g.lineTo(i / (bins - 1) * W, H - Math.min(1, h[i] / max) * (H - 4));
+    g.lineTo(W, H); g.closePath(); g.fillStyle = cols[ci]; g.fill();
+  });
+  g.globalCompositeOperation = "source-over";
+}
+
+// Modes d'affichage
+function setMode(m) {
+  state.mode = m;
+  $("modeAfter").setAttribute("aria-pressed", String(m === "after"));
+  $("modeSplit").setAttribute("aria-pressed", String(m === "split"));
+  $("modeBefore").setAttribute("aria-pressed", String(m === "before"));
+  applyMode();
+}
+function applyMode() {
+  const m = state.mode;
+  cvAfter.hidden = m === "before";
+  $("tagBefore").hidden = m !== "before";
+  $("handle").hidden = m !== "split";
+  stage.classList.toggle("split", m === "split");
+  cvAfter.style.clipPath = m === "split" ? `inset(0 0 0 ${state.split}%)` : "none";
+  $("handle").style.left = state.split + "%";
+}
+$("modeAfter").onclick = () => setMode("after");
+$("modeSplit").onclick = () => setMode("split");
+$("modeBefore").onclick = () => setMode("before");
+let dragging = false;
+function moveSplit(e) { const r = stage.getBoundingClientRect(); state.split = Math.max(0, Math.min(100, (e.clientX - r.left) / r.width * 100)); applyMode(); }
+stage.addEventListener("pointerdown", e => { if (state.mode !== "split") return; dragging = true; stage.setPointerCapture(e.pointerId); moveSplit(e); });
+stage.addEventListener("pointermove", e => { if (dragging) moveSplit(e); });
+stage.addEventListener("pointerup", () => dragging = false);
+stage.addEventListener("pointercancel", () => dragging = false);
+
+// Chargement des images
+function loadImg(url) { return new Promise((ok, ko) => { const im = new Image(); im.onload = () => ok(im); im.onerror = ko; im.src = url; }); }
+
+function addSource(name, source, w, h, example) {
+  const s = Math.min(1, PREVIEW_MAX / Math.max(w, h));
+  const pw = Math.max(1, Math.round(w * s)), ph = Math.max(1, Math.round(h * s));
+  const c = document.createElement("canvas"); c.width = pw; c.height = ph;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.imageSmoothingQuality = "high"; g.drawImage(source, 0, 0, pw, ph);
+  const preview = g.getImageData(0, 0, pw, ph);
+  const tc = document.createElement("canvas"), ts = 192 / Math.max(w, h);
+  tc.width = Math.round(w * ts); tc.height = Math.round(h * ts);
+  tc.getContext("2d").drawImage(source, 0, 0, tc.width, tc.height);
+  const auto = autoParams(preview.data, pw, ph);
+  const item = { name, source, w, h, pw, ph, preview, auto, params: { ...auto }, preset: "auto", thumb: tc.toDataURL("image/jpeg", 0.8), example };
+  state.items.push(item);
+  return item;
+}
+
+async function addFiles(files) {
+  const list = [...files].filter(f => f.type.startsWith("image/"));
+  if (!list.length) return;
+  showBusy(`Import de ${list.length} photo${list.length > 1 ? "s" : ""}…`);
+  await tick();
+  // Retire l'exemple dès que l'utilisateur ajoute ses propres photos
+  state.items = state.items.filter(it => !it.example);
+  let first = -1;
+  for (const f of list) {
+    try {
+      const im = await loadImg(URL.createObjectURL(f));
+      addSource(f.name, im, im.naturalWidth, im.naturalHeight, false);
+      if (first < 0) first = state.items.length - 1;
+    } catch { console.warn("Format non lu :", f.name); }
+  }
+  hideBusy();
+  if (first >= 0) select(first); else buildStrip();
+}
+
+function select(i) {
+  state.cur = i; const it = curItem();
+  $("metaName").textContent = it.example ? "Exemple — " + it.name : it.name;
+  $("metaSize").textContent = `${it.w} × ${it.h} px`;
+  buildStrip(); syncControls(); fitStage(); scheduleRender();
+}
+
+function buildStrip() {
+  const strip = $("strip"), actions = strip.querySelector(".strip-actions");
+  strip.querySelectorAll(".thumb").forEach(t => t.remove());
+  state.items.forEach((it, i) => {
+    const b = document.createElement("button");
+    b.className = "thumb"; b.setAttribute("aria-current", String(i === state.cur)); b.title = it.name;
+    b.innerHTML = `<img alt="" src="${it.thumb}"><span></span>`;
+    b.querySelector("span").textContent = it.example ? "Exemple" : it.name;
+    b.onclick = () => select(i);
+    strip.insertBefore(b, actions);
+  });
+}
+
+$("btnOpen").onclick = () => $("fileInput").click();
+$("fileInput").onchange = e => { addFiles(e.target.files); e.target.value = ""; };
+let dragDepth = 0;
+window.addEventListener("dragenter", e => { e.preventDefault(); dragDepth++; $("dropHint").hidden = false; });
+window.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("dropHint").hidden = true; } });
+window.addEventListener("dragover", e => e.preventDefault());
+window.addEventListener("drop", e => { e.preventDefault(); dragDepth = 0; $("dropHint").hidden = true; addFiles(e.dataTransfer.files); });
+window.addEventListener("paste", e => { const f = [...(e.clipboardData?.files || [])]; if (f.length) addFiles(f); });
+
+$("btnAuto").onclick = () => { const it = curItem(); if (!it) return; it.params = { ...it.auto }; it.preset = "auto"; syncControls(); scheduleRender(); };
+$("btnReset").onclick = () => { const it = curItem(); if (!it) return; it.params = { ...DEFAULTS }; it.preset = null; syncControls(); scheduleRender(); };
+$("btnSync").onclick = () => {
+  const it = curItem(); if (!it) return;
+  for (const o of state.items) if (o !== it) {
+    // Un préréglage s'adapte à chaque photo ; des réglages manuels sont copiés tels quels
+    const pr = PRESETS.find(p => p.id === it.preset);
+    o.params = pr ? applyPreset(o.auto, pr) : { ...it.params }; o.preset = it.preset;
+  }
+  flash($("btnSync"), "Réglages appliqués");
+};
+function flash(btn, txt) { const old = btn.textContent; btn.textContent = txt; setTimeout(() => btn.textContent = old, 1400); }
+
+// Export pleine résolution
+$("expQuality").oninput = e => $("expQualityOut").textContent = e.target.value;
+function showBusy(t) { $("busyText").textContent = t; $("busy").hidden = false; }
+function hideBusy() { $("busy").hidden = true; }
+const tick = () => new Promise(r => setTimeout(r, 30));
+
+async function exportItem(it) {
+  const scale = parseFloat($("expScale").value), type = $("expFormat").value, q = parseInt($("expQuality").value, 10) / 100;
+  let W = Math.round(it.w * scale), H = Math.round(it.h * scale);
+  const maxPx = 80e6; if (W * H > maxPx) { const k = Math.sqrt(maxPx / (W * H)); W = Math.round(W * k); H = Math.round(H * k); }
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.imageSmoothingQuality = "high"; g.drawImage(it.source, 0, 0, W, H);
+  const src = g.getImageData(0, 0, W, H);
+  develop(src.data, W, H, it.params, src);
+  g.putImageData(src, 0, 0);
+  const blob = await new Promise(r => c.toBlob(r, type, q));
+  const ext = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[type];
+  const base = it.name.replace(/\.[^.]+$/, "");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = `${base}_revele.${ext}`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+async function runExport(list) {
+  try {
+    for (let i = 0; i < list.length; i++) {
+      showBusy(list.length > 1 ? `Export ${i + 1} / ${list.length} — ${list[i].name}` : `Export de ${list[i].name}…`);
+      await tick(); await exportItem(list[i]);
+    }
+  } catch (err) { console.error(err); alert("L'export a échoué : image trop grande pour la mémoire du navigateur. Essayez la taille 100 %."); }
+  hideBusy();
+}
+$("btnExport").onclick = () => { const it = curItem(); if (it) runExport([it]); };
+$("btnExportAll").onclick = () => { if (state.items.length) runExport(state.items); };
+
+/* ============================================================
+   Photo d'exemple : paysage volontairement terne et voilé
+   ============================================================ */
+function makeSample() {
+  const w = 1500, h = 1000, c = document.createElement("canvas"); c.width = w; c.height = h;
+  const g = c.getContext("2d"), horizon = h * 0.6;
+  let gr = g.createLinearGradient(0, 0, 0, horizon);
+  gr.addColorStop(0, "#4d6f96"); gr.addColorStop(0.55, "#b9a8a0"); gr.addColorStop(1, "#efc58f");
+  g.fillStyle = gr; g.fillRect(0, 0, w, horizon);
+  const sun = g.createRadialGradient(w * 0.66, horizon - 70, 5, w * 0.66, horizon - 70, 260);
+  sun.addColorStop(0, "rgba(255,244,214,1)"); sun.addColorStop(0.12, "rgba(255,226,170,.9)"); sun.addColorStop(1, "rgba(255,200,140,0)");
+  g.fillStyle = sun; g.fillRect(0, 0, w, horizon);
+  for (let i = 0; i < 26; i++) {
+    const x = (i * 397) % w, y = 60 + ((i * 131) % 260), rw = 120 + (i * 53) % 160;
+    g.fillStyle = `rgba(255,236,220,${0.12 + (i % 5) * 0.03})`;
+    g.beginPath(); g.ellipse(x, y, rw, rw * 0.22, 0, 0, Math.PI * 2); g.fill();
+  }
+  const ridge = (base, amp, col, s) => {
+    g.beginPath(); g.moveTo(0, horizon + 2);
+    for (let x = 0; x <= w; x += 6) g.lineTo(x, base - amp * (0.5 + 0.3 * Math.sin(x * 0.004 + s) + 0.15 * Math.sin(x * 0.013 + s * 2) + 0.06 * Math.sin(x * 0.05 + s)));
+    g.lineTo(w, horizon + 2); g.closePath(); g.fillStyle = col; g.fill();
+  };
+  ridge(horizon - 60, 220, "#8a8fa3", 1.3);
+  ridge(horizon - 20, 160, "#5f6b78", 4.1);
+  ridge(horizon + 2, 90, "#3d4d45", 2.2);
+  const copy = document.createElement("canvas"); copy.width = w; copy.height = horizon; copy.getContext("2d").drawImage(c, 0, 0);
+  g.fillStyle = "#3f5662"; g.fillRect(0, horizon, w, h - horizon);
+  g.save(); g.globalAlpha = 0.55; g.translate(0, horizon * 2); g.scale(1, -1); g.drawImage(copy, 0, 0); g.restore();
+  g.beginPath(); g.moveTo(0, h);
+  for (let x = 0; x <= w; x += 8) g.lineTo(x, h - 120 - 70 * Math.sin(x * 0.003 + 0.6) - 20 * Math.sin(x * 0.02));
+  g.lineTo(w, h); g.closePath(); g.fillStyle = "#2c3a26"; g.fill();
+  for (let i = 0; i < 40; i++) {
+    const x = (i * 211) % w, base = h - 110 - 70 * Math.sin(x * 0.003 + 0.6), th = 60 + (i * 37) % 90;
+    g.beginPath(); g.moveTo(x, base - th); g.lineTo(x - th * 0.22, base + 10); g.lineTo(x + th * 0.22, base + 10); g.closePath();
+    g.fillStyle = i % 3 ? "#26341f" : "#30402a"; g.fill();
+  }
+  // Voile gris-bleu et faible contraste, comme une photo de téléphone par temps brumeux
+  g.fillStyle = "rgba(128,136,150,.38)"; g.fillRect(0, 0, w, h);
+  const id = g.getImageData(0, 0, w, h), d = id.data;
+  let s = 99;
+  for (let i = 0; i < d.length; i += 4) { s = (Math.imul(s, 1103515245) + 12345) >>> 0; const nz = ((s >>> 16) % 13) - 6; d[i] += nz; d[i + 1] += nz; d[i + 2] += nz; }
+  g.putImageData(id, 0, 0);
+  return c;
+}
+
+(function init() {
+  const sample = makeSample();
+  addSource("paysage-voile.jpg", sample, sample.width, sample.height, true);
+  select(0);
+  setMode("split");
+})();
+</script>
+</body>
+</html>

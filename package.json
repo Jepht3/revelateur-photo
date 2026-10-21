@@ -1,0 +1,61 @@
+{
+  "name": "revelateur-photo",
+  "productName": "Revelateur Photo",
+  "version": "1.0.0",
+  "description": "Développement et retouche photo : corrections automatiques, préréglages, historique et traitement par lot.",
+  "author": "Révélateur Photo",
+  "license": "UNLICENSED",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "icon": "node scripts/make-icon.js",
+    "dist": "node scripts/make-icon.js && electron-builder --win nsis --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.revelateur.photo",
+    "productName": "Revelateur Photo",
+    "copyright": "Révélateur Photo",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Révélateur Photo",
+      "uninstallDisplayName": "Révélateur Photo",
+      "installerLanguages": [
+        "fr_FR"
+      ],
+      "language": "1036",
+      "artifactName": "Revelateur-Photo-Setup-${version}.${ext}"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jepht3/revelateur-photo.git"
+  },
+  "homepage": "https://github.com/Jepht3/revelateur-photo#readme"
+}
